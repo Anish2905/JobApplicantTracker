@@ -1,12 +1,18 @@
 {
     "name": "job-tracker",
     "version": "1.0.0",
-    "description": "Job Applicant Tracker",
+    "description": "Job Applicant Tracker with local-first sync",
     "scripts": {
         "start": "cd server && npm install && node server.js",
-        "postinstall": "cd server && npm install"
+        "postinstall": "cd server && npm install",
+        "vercel-build": "echo 'No build required'"
     },
     "engines": {
         "node": ">=18"
+    },
+    "dependencies": {
+        "@libsql/client": "^0.4.0",
+        "bcryptjs": "^2.4.3",
+        "jsonwebtoken": "^9.0.2"
     }
 }

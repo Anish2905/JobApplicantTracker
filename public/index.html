@@ -1046,6 +1046,176 @@
         window.addEventListener('online', updateConnectionStatus);
         window.addEventListener('offline', updateConnectionStatus);
 
+        // ===== IndexedDB Local Storage =====
+        const DB_NAME = 'JobTrackerDB';
+        const DB_VERSION = 1;
+        let idb = null;
+        const SYNC_KEY = 'job_tracker_last_sync';
+        const PENDING_KEY = 'job_tracker_pending';
+
+        async function openIDB() {
+            if (idb) return idb;
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open(DB_NAME, DB_VERSION);
+                request.onerror = () => reject(request.error);
+                request.onsuccess = () => { idb = request.result; resolve(idb); };
+                request.onupgradeneeded = (e) => {
+                    const db = e.target.result;
+                    if (!db.objectStoreNames.contains('applications')) {
+                        const store = db.createObjectStore('applications', { keyPath: 'id' });
+                        store.createIndex('updatedAt', 'updatedAt');
+                    }
+                };
+            });
+        }
+
+        async function getAllLocal() {
+            const db = await openIDB();
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction('applications', 'readonly');
+                const store = tx.objectStore('applications');
+                const request = store.getAll();
+                request.onsuccess = () => resolve(request.result.filter(a => !a.deletedAt));
+                request.onerror = () => reject(request.error);
+            });
+        }
+
+        async function saveLocal(app) {
+            const db = await openIDB();
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction('applications', 'readwrite');
+                const store = tx.objectStore('applications');
+                store.put(app);
+                tx.oncomplete = () => resolve();
+                tx.onerror = () => reject(tx.error);
+            });
+        }
+
+        async function deleteLocal(id) {
+            const db = await openIDB();
+            const app = await getLocalById(id);
+            if (app) {
+                app.deletedAt = new Date().toISOString();
+                app.updatedAt = app.deletedAt;
+                await saveLocal(app);
+            }
+        }
+
+        async function getLocalById(id) {
+            const db = await openIDB();
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction('applications', 'readonly');
+                const store = tx.objectStore('applications');
+                const request = store.get(id);
+                request.onsuccess = () => resolve(request.result);
+                request.onerror = () => reject(request.error);
+            });
+        }
+
+        function getPendingChanges() {
+            return JSON.parse(localStorage.getItem(PENDING_KEY) || '[]');
+        }
+
+        function addPendingChange(appId) {
+            const pending = getPendingChanges();
+            if (!pending.includes(appId)) {
+                pending.push(appId);
+                localStorage.setItem(PENDING_KEY, JSON.stringify(pending));
+            }
+            updateSyncIndicator();
+        }
+
+        function clearPendingChanges() {
+            localStorage.setItem(PENDING_KEY, '[]');
+            updateSyncIndicator();
+        }
+
+        function updateSyncIndicator() {
+            const pending = getPendingChanges();
+            if (statusIndicator) {
+                if (!navigator.onLine) {
+                    statusIndicator.textContent = '🔴 Offline';
+                } else if (pending.length > 0) {
+                    statusIndicator.textContent = `🟡 ${pending.length} pending`;
+                } else {
+                    statusIndicator.textContent = '🟢 Synced';
+                }
+            }
+        }
+
+        async function syncToCloud() {
+            if (!navigator.onLine || !getToken()) return;
+            const pending = getPendingChanges();
+            if (pending.length === 0) return;
+
+            try {
+                const changes = [];
+                for (const id of pending) {
+                    const app = await getLocalById(id);
+                    if (app) changes.push(app);
+                }
+
+                const lastSync = localStorage.getItem(SYNC_KEY) || '1970-01-01T00:00:00.000Z';
+                const res = await fetch(`${API_BASE}/sync`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
+                    body: JSON.stringify({ changes, lastSync })
+                });
+
+                if (res.ok) {
+                    const { applications: serverApps, serverTime } = await res.json();
+                    // Merge server changes
+                    for (const app of serverApps) {
+                        const local = await getLocalById(app.id);
+                        if (!local || app.updatedAt > local.updatedAt) {
+                            await saveLocal(app);
+                        }
+                    }
+                    localStorage.setItem(SYNC_KEY, serverTime);
+                    clearPendingChanges();
+                    applications = await getAllLocal();
+                    render();
+                }
+            } catch (err) {
+                console.error('Sync error:', err);
+            }
+            updateSyncIndicator();
+        }
+
+        async function syncFromCloud() {
+            if (!navigator.onLine || !getToken()) return;
+            try {
+                const lastSync = localStorage.getItem(SYNC_KEY) || '1970-01-01T00:00:00.000Z';
+                const res = await fetch(`${API_BASE}/sync?since=${encodeURIComponent(lastSync)}`, {
+                    headers: { 'Authorization': `Bearer ${getToken()}` }
+                });
+                if (res.ok) {
+                    const { applications: serverApps, serverTime } = await res.json();
+                    for (const app of serverApps) {
+                        const local = await getLocalById(app.id);
+                        if (!local || app.updatedAt > local.updatedAt) {
+                            await saveLocal(app);
+                        }
+                    }
+                    localStorage.setItem(SYNC_KEY, serverTime);
+                    applications = await getAllLocal();
+                    render();
+                }
+            } catch (err) {
+                console.error('Sync from cloud error:', err);
+            }
+            updateSyncIndicator();
+        }
+
+        // Auto-sync when coming online
+        window.addEventListener('online', () => {
+            updateConnectionStatus();
+            syncToCloud();
+        });
+
+        // Periodic sync every 30 seconds when online
+        setInterval(() => { if (navigator.onLine && getToken()) syncToCloud(); }, 30000);
+
         const API_BASE = window.location.origin + '/api';
         const TOKEN_KEY = 'job_tracker_token';
         let applications = [], editingId = null, deletedApp = null, toastTimeout = null, isLoginMode = true;
@@ -1099,8 +1269,8 @@
             const pin = getPin();
             if (pin.length !== 4) { showAuthError('Please enter your 4-digit PIN'); return; }
             try {
-                const endpoint = isLoginMode ? '/login' : '/register';
-                const res = await fetch(`${API_BASE}${endpoint}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, pin }) });
+                const action = isLoginMode ? 'login' : 'register';
+                const res = await fetch(`${API_BASE}/auth`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, pin, action }) });
                 const text = await res.text();
                 let data = {};
                 try { data = text ? JSON.parse(text) : {}; } catch { data = { error: 'Server error' }; }
@@ -1123,7 +1293,20 @@
             return res.json();
         }
 
-        async function fetchApplications() { loading.classList.remove('hidden'); try { applications = await apiRequest('/applications'); } catch { applications = []; } loading.classList.add('hidden'); render(); }
+        async function fetchApplications() {
+            loading.classList.remove('hidden');
+            try {
+                applications = await getAllLocal();
+                render();
+                // Also sync from cloud in background
+                syncFromCloud();
+            } catch (err) {
+                console.error('Fetch error:', err);
+                applications = [];
+            }
+            loading.classList.add('hidden');
+            updateSyncIndicator();
+        }
         function generateId() { return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16); }); }
 
         function render() { renderStats(); renderList(); }
@@ -1146,22 +1329,51 @@
         function openModal(isEdit = false) { modalTitle.textContent = isEdit ? 'Edit Application' : 'Add Application'; document.getElementById('saveBtn').textContent = isEdit ? 'Save Changes' : 'Save Application'; modalBackdrop.classList.add('active'); document.getElementById('company').focus(); }
         function closeModal() { modalBackdrop.classList.remove('active'); appForm.reset(); editingId = null; }
 
+        // Local-first CRUD functions
         async function addApplication(data) {
             const app = { id: generateId(), company: data.company.trim(), position: data.position.trim(), status: data.status, appliedDate: data.appliedDate || null, url: data.url.trim() || null, notes: data.notes.trim() || null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
-            try { await apiRequest('/applications', { method: 'POST', body: JSON.stringify(app) }); applications.unshift(app); render(); showToast('Application added'); } catch (err) { showToast(err.message, false, true); }
+            await saveLocal(app);
+            addPendingChange(app.id);
+            applications.unshift(app);
+            render();
+            showToast('Application added');
+            syncToCloud(); // Try to sync immediately
         }
         async function updateApplication(id, data) {
-            const updates = { company: data.company.trim(), position: data.position.trim(), status: data.status, appliedDate: data.appliedDate || null, url: data.url.trim() || null, notes: data.notes.trim() || null, updatedAt: new Date().toISOString() };
-            try { await apiRequest(`/applications/${id}`, { method: 'PUT', body: JSON.stringify(updates) }); const idx = applications.findIndex(a => a.id === id); if (idx !== -1) applications[idx] = { ...applications[idx], ...updates }; render(); showToast('Changes saved'); } catch (err) { showToast(err.message, false, true); }
+            const existing = await getLocalById(id);
+            if (!existing) return;
+            const updated = { ...existing, company: data.company.trim(), position: data.position.trim(), status: data.status, appliedDate: data.appliedDate || null, url: data.url.trim() || null, notes: data.notes.trim() || null, updatedAt: new Date().toISOString() };
+            await saveLocal(updated);
+            addPendingChange(id);
+            const idx = applications.findIndex(a => a.id === id);
+            if (idx !== -1) applications[idx] = updated;
+            render();
+            showToast('Changes saved');
+            syncToCloud();
         }
         async function deleteApp(id) {
-            const idx = applications.findIndex(a => a.id === id); if (idx === -1) return;
+            const idx = applications.findIndex(a => a.id === id);
+            if (idx === -1) return;
             deletedApp = { ...applications[idx], index: idx };
-            try { await apiRequest(`/applications/${id}`, { method: 'DELETE' }); applications.splice(idx, 1); render(); showToast('Application deleted', true); } catch (err) { deletedApp = null; showToast(err.message, false, true); }
+            await deleteLocal(id);
+            addPendingChange(id);
+            applications.splice(idx, 1);
+            render();
+            showToast('Application deleted', true);
+            syncToCloud();
         }
         async function undoDelete() {
             if (!deletedApp) return;
-            try { await apiRequest('/applications/restore', { method: 'POST', body: JSON.stringify(deletedApp) }); applications.splice(deletedApp.index, 0, deletedApp); delete deletedApp.index; deletedApp = null; hideToast(); render(); showToast('Restored'); } catch (err) { showToast(err.message, false, true); }
+            const restored = { ...deletedApp, deletedAt: null, updatedAt: new Date().toISOString() };
+            delete restored.index;
+            await saveLocal(restored);
+            addPendingChange(restored.id);
+            applications.splice(deletedApp.index, 0, restored);
+            deletedApp = null;
+            hideToast();
+            render();
+            showToast('Restored');
+            syncToCloud();
         }
         function editApp(id) {
             const app = applications.find(a => a.id === id); if (!app) return;
