@@ -980,11 +980,14 @@
             try {
                 const endpoint = isLoginMode ? '/login' : '/register';
                 const res = await fetch(`${API_BASE}${endpoint}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, pin }) });
-                const data = await res.json();
-                if (!res.ok) throw new Error(data.error || 'Authentication failed');
+                const text = await res.text();
+                let data = {};
+                try { data = text ? JSON.parse(text) : {}; } catch { data = { error: 'Server error' }; }
+                if (!res.ok) throw new Error(data.error || `Server returned ${res.status}`);
+                if (!data.token) throw new Error('No token received');
                 setToken(data.token);
                 showApp();
-            } catch (err) { showAuthError(err.message); clearPin(); }
+            } catch (err) { showAuthError(err.message || 'Connection failed'); clearPin(); }
         });
 
         document.getElementById('logoutBtn').addEventListener('click', () => { clearToken(); applications = []; showAuth(); });

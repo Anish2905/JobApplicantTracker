@@ -45,6 +45,10 @@ function generateId() {
 app.post('/api/register', async (req, res) => {
     try {
         const db = getDb();
+        if (!db) {
+            console.error('Database not initialized');
+            return res.status(503).json({ error: 'Database not ready, please try again' });
+        }
         const { username, pin } = req.body;
 
         if (!username || !pin) {
@@ -79,7 +83,7 @@ app.post('/api/register', async (req, res) => {
         res.status(201).json({ token, userId: id });
     } catch (error) {
         console.error('Register error:', error);
-        res.status(500).json({ error: 'Registration failed' });
+        res.status(500).json({ error: 'Registration failed: ' + (error.message || 'Unknown error') });
     }
 });
 
@@ -87,6 +91,10 @@ app.post('/api/register', async (req, res) => {
 app.post('/api/login', async (req, res) => {
     try {
         const db = getDb();
+        if (!db) {
+            console.error('Database not initialized');
+            return res.status(503).json({ error: 'Database not ready, please try again' });
+        }
         const { username, pin } = req.body;
 
         if (!username || !pin) {
@@ -109,7 +117,7 @@ app.post('/api/login', async (req, res) => {
         res.json({ token, userId });
     } catch (error) {
         console.error('Login error:', error);
-        res.status(500).json({ error: 'Login failed' });
+        res.status(500).json({ error: 'Login failed: ' + (error.message || 'Unknown error') });
     }
 });
 
