@@ -1845,7 +1845,11 @@
             applications.unshift(app);
             render();
             showToast('Application added');
-            syncToCloud(); // Try to sync immediately
+            syncToCloud();
+            // Auto-open interview modal for new interview applications
+            if (data.status === 'interview') {
+                setTimeout(() => openInterviewModal(app.id), 300);
+            }
         }
         async function updateApplication(id, data) {
             const existing = await getLocalById(id);
