@@ -34,13 +34,19 @@ module.exports = async (req, res) => {
             if (id) {
                 console.log(`[Resume API] GET single resume. userId=${userId}, resumeId=${id}`);
 
-                const result = await db.execute({
-                    sql: `SELECT id, name, file_name, file_data, file_type, created_at, updated_at 
-                          FROM resumes WHERE id = ? AND user_id = ? AND deleted_at IS NULL`,
-                    args: [id, userId]
-                });
-
-                console.log(`[Resume API] Query returned ${result.rows.length} rows`);
+                let result;
+                try {
+                    console.log(`[Resume API] Executing query...`);
+                    result = await db.execute({
+                        sql: `SELECT id, name, file_name, file_data, file_type, created_at, updated_at 
+                              FROM resumes WHERE id = ? AND user_id = ? AND deleted_at IS NULL`,
+                        args: [id, userId]
+                    });
+                    console.log(`[Resume API] Query SUCCESS, rows=${result.rows.length}`);
+                } catch (queryErr) {
+                    console.error(`[Resume API] QUERY ERROR:`, queryErr.message || queryErr);
+                    return res.status(500).json({ error: 'Database query failed', details: queryErr.message });
+                }
 
                 if (result.rows.length === 0) {
                     console.log(`[Resume API] Resume NOT FOUND. Checking if exists with different user...`);
@@ -58,13 +64,20 @@ module.exports = async (req, res) => {
                 }
 
                 const row = result.rows[0];
-                console.log(`[Resume API] Returning resume: ${row.file_name}, dataLength=${row.file_data?.length || 0}`);
+                const dataLen = row.file_data ? row.file_data.length : 0;
+                console.log(`[Resume API] Returning resume: ${row.file_name}, dataLength=${dataLen}`);
+
+                // Check if response might be too large
+                if (dataLen > 4000000) {
+                    console.warn(`[Resume API] WARNING: Response may exceed Vercel limit (${dataLen} bytes)`);
+                }
+
                 return res.json({
                     resume: {
                         id: row.id,
                         name: row.name,
                         fileName: row.file_name,
-                        fileData: row.file_data, // Send data only when requested
+                        fileData: row.file_data,
                         fileType: row.file_type,
                         createdAt: row.created_at,
                         updatedAt: row.updated_at

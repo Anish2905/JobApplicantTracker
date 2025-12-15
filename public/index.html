@@ -1288,31 +1288,13 @@
                             placeholder="Interview details, contacts, follow-ups..."></textarea>
                     </div>
                     <div class="form-group">
-                        <label>Resume</label>
-                        <!-- Linked resume display (hidden by default) -->
-                        <div id="resumeLinked"
-                            style="display: none; padding: var(--space-3); background: var(--color-primary-light); border-radius: var(--radius-sm); align-items: center; justify-content: space-between; gap: var(--space-3);">
-                            <span
-                                style="display: flex; align-items: center; gap: var(--space-2); flex: 1; min-width: 0;">📄
-                                <span id="linkedResumeName"
-                                    style="font-weight: 500; word-break: break-all; white-space: normal;"></span></span>
-                            <span style="display: flex; gap: var(--space-2);">
-                                <button type="button" onclick="viewLinkedResume()" class="btn btn-icon"
-                                    style="font-size: 12px; padding: 4px 8px;" title="View resume">👁️ View</button>
-                                <button type="button" onclick="unlinkResume()" class="btn btn-icon"
-                                    style="font-size: 12px; padding: 4px 8px;" title="Remove">✕</button>
-                            </span>
-                        </div>
-                        <!-- Upload section (visible by default) -->
-                        <div id="resumeUploadSection">
-                            <input type="file" id="resumeUpload" accept=".pdf,.doc,.docx"
-                                style="font-size: var(--font-size-sm);">
-                            <small
-                                style="display: block; margin-top: var(--space-1); color: var(--color-text-tertiary);">PDF,
-                                DOC, or DOCX</small>
-                        </div>
-                        <!-- Hidden field for form submission -->
-                        <input type="hidden" id="resumeIdField" name="resumeId" value="">
+                        <label for="resumeUrl">Resume Link</label>
+                        <input type="url" id="resumeUrl" name="resumeUrl"
+                            placeholder="https://drive.google.com/... or https://yoursite.com/resume.pdf"
+                            style="font-size: var(--font-size-sm);">
+                        <small style="display: block; margin-top: var(--space-1); color: var(--color-text-tertiary);">
+                            Paste a link to your resume (Google Drive, Dropbox, or direct URL)
+                        </small>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -1906,7 +1888,7 @@
                         <div class="app-meta">
                             <span class="app-status status-${app.status}">${app.status}</span>
                             ${app.appliedDate ? `<span class="app-meta-item">${formatDate(app.appliedDate)}</span>` : ''}
-                            ${app.resumeId ? `<button class="btn btn-icon" onclick="event.stopPropagation(); viewResume('${app.resumeId}')" title="View Resume" style="font-size: 12px;">📄</button>` : ''}
+                            ${app.resumeUrl ? `<a href="${escapeHtml(app.resumeUrl)}" target="_blank" rel="noopener" title="View Resume">📄 Resume</a>` : ''}
                             ${app.url ? `<a href="${escapeHtml(app.url)}" target="_blank" rel="noopener">View posting →</a>` : ''}
                         </div>
                         ${app.notes ? `<div class="app-notes">${escapeHtml(app.notes)}</div>` : ''}
@@ -2023,9 +2005,7 @@
             document.getElementById('appliedDate').value = app.appliedDate || '';
             document.getElementById('url').value = app.url || '';
             document.getElementById('notes').value = app.notes || '';
-
-            // Handle resume display (showResumeUI defined later)
-            await showResumeUI(app.resumeId);
+            document.getElementById('resumeUrl').value = app.resumeUrl || '';
             openModal(true);
         }
 
@@ -2132,214 +2112,7 @@
             isPulling = false;
         });
 
-        // ===== Resume Handling (Simplified) =====
-        const resumeUpload = document.getElementById('resumeUpload');
-        const resumeLinked = document.getElementById('resumeLinked');
-        const resumeUploadSection = document.getElementById('resumeUploadSection');
-        const linkedResumeName = document.getElementById('linkedResumeName');
-        const resumeIdField = document.getElementById('resumeIdField');
-
-        // Track current resume for viewing
-        let currentLinkedResumeId = null;
-
-        // Sync resumes from cloud on load (Metadata only first)
-        async function syncResumesFromCloud() {
-            const token = getToken();
-            if (!token) return;
-            try {
-                const res = await fetch(`${API_BASE}/resume-sync`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
-                if (res.ok) {
-                    const { resumes } = await res.json();
-                    // Merge strategy:
-                    // 1. If we have full fileData locally, KEEP IT.
-                    // 2. If we don't have it locally, save the metadata (shell).
-                    for (const r of resumes) {
-                        const local = await getResumeById(r.id);
-                        if (local && local.fileData) {
-                            // We have the full file, don't overwrite with metadata-only version
-                            continue;
-                        }
-                        await saveResume(r);
-                    }
-                }
-            } catch (e) { console.error('Resume sync failed:', e); }
-        }
-
-        // View linked resume (Fetch on demand if missing data)
-        async function viewLinkedResume() {
-            if (!currentLinkedResumeId) return;
-            let resume = await getResumeById(currentLinkedResumeId);
-
-            // If we have metadata but no fileData, fetch it now
-            if (resume && !resume.fileData) {
-                showToast('Downloading resume...', false);
-                try {
-                    const token = getToken();
-                    const res = await fetch(`${API_BASE}/resume-sync?id=${currentLinkedResumeId}`, {
-                        headers: { 'Authorization': `Bearer ${token}` }
-                    });
-
-                    if (res.ok) {
-                        const data = await res.json();
-                        if (data.resume && data.resume.fileData) {
-                            resume = data.resume;
-                            // Save full data for next time
-                            await saveResume(resume);
-                        }
-                    } else {
-                        throw new Error('Download failed');
-                    }
-                } catch (e) {
-                    showToast('Failed to download resume', false, true);
-                    return;
-                }
-            }
-
-            if (!resume || !resume.fileData) {
-                showToast('Resume not found', false, true);
-                return;
-            }
-            // Open in new tab
-            const win = window.open('', '_blank');
-            if (resume.fileType === 'application/pdf') {
-                win.document.write(`<iframe src="${resume.fileData}" style="width:100%;height:100%;border:none;"></iframe>`);
-            } else {
-                // Download non-PDF files
-                const a = document.createElement('a');
-                a.href = resume.fileData;
-                a.download = resume.fileName;
-                a.click();
-            }
-        }
-
-        // Show/hide resume UI based on whether resumeId exists
-        async function showResumeUI(resumeId) {
-            if (resumeId) {
-                let resume = await getResumeById(resumeId);
-
-                // Fallback: If not found locally, try fetching metadata from cloud
-                if (!resume) {
-                    // Show "Loading..." state temporarily
-                    linkedResumeName.textContent = 'Loading resume info...';
-                    resumeLinked.style.display = 'flex';
-                    resumeUploadSection.style.display = 'none';
-                    resumeIdField.value = resumeId;
-
-                    try {
-                        const token = getToken();
-                        if (token) {
-                            const res = await fetch(`${API_BASE}/resume-sync?id=${resumeId}`, {
-                                headers: { 'Authorization': `Bearer ${token}` }
-                            });
-                            if (res.ok) {
-                                const data = await res.json();
-                                if (data.resume) {
-                                    resume = data.resume;
-                                    await saveResume(resume); // Save for future
-                                }
-                            }
-                        }
-                    } catch (e) {
-                        console.error('Failed to quick-fetch resume:', e);
-                    }
-                }
-
-                if (resume) {
-                    linkedResumeName.textContent = resume.fileName || resume.name;
-                    resumeLinked.style.display = 'flex';
-                    resumeUploadSection.style.display = 'none';
-                    resumeIdField.value = resumeId;
-                    currentLinkedResumeId = resumeId;
-                    return;
-                }
-            }
-            // No resume or not found - show upload
-            resumeLinked.style.display = 'none';
-            resumeUploadSection.style.display = 'block';
-            resumeIdField.value = '';
-            currentLinkedResumeId = null;
-        }
-
-        // viewLinkedResume is defined above with fetch-on-demand logic
-
-        // Unlink resume from current form
-        function unlinkResume() {
-            resumeIdField.value = '';
-            currentLinkedResumeId = null;
-            resumeLinked.style.display = 'none';
-            resumeUploadSection.style.display = 'block';
-        }
-        window.unlinkResume = unlinkResume;
-
-        // Upload handler
-        resumeUpload.addEventListener('change', async (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
-
-            // Vercel serverless limit is 4.5MB. Base64 increases size by ~33%.
-            // Limit file to 3MB to be safe.
-            if (file.size > 3 * 1024 * 1024) {
-                showToast('File too large (max 3MB)', false, true);
-                resumeUpload.value = '';
-                return;
-            }
-
-            const reader = new FileReader();
-            reader.onload = async () => {
-                const resume = {
-                    id: generateId(),
-                    name: file.name,
-                    fileName: file.name,
-                    fileData: reader.result,
-                    fileType: file.type,
-                    createdAt: new Date().toISOString(),
-                    updatedAt: new Date().toISOString()
-                };
-
-                try {
-                    await saveResume(resume);
-                    await syncResumeToCloud(resume);
-                    await showResumeUI(resume.id);
-                    showToast(`Resume "${file.name}" uploaded`);
-                } catch (err) {
-                    console.error('Upload failed:', err);
-                    showToast('Upload failed', false, true);
-                }
-                resumeUpload.value = '';
-            };
-            reader.readAsDataURL(file);
-        });
-
-        // Improved syncResumeToCloud - Now throws on failure to alert user
-        async function syncResumeToCloud(resume) {
-            const token = getToken();
-            if (!token) throw new Error('Not authenticated');
-
-            const res = await fetch(`${API_BASE}/resume-sync`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                body: JSON.stringify({ action: 'upload', resume })
-            });
-
-            if (!res.ok) {
-                const text = await res.text();
-                console.error('Resume sync error response:', text);
-                // Show specific error toasts
-                if (res.status === 413) {
-                    throw new Error('File too large for cloud (max 4.5MB)');
-                } else if (res.status === 404) {
-                    throw new Error('Sync API not found');
-                } else {
-                    throw new Error(`Server error: ${res.status}`);
-                }
-            }
-            // Success!
-        }
-
-        // Sync resumes when app loads
-        syncResumesFromCloud();
+        // Resume feature now uses simple URL links - no file upload/sync needed
 
         // ===== Interview Modal Handling =====
         const interviewModalBackdrop = document.getElementById('interviewModalBackdrop');

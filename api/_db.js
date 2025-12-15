@@ -47,6 +47,13 @@ async function initSchema() {
         // Ignore error if column already exists
     }
 
+    // Migration: add resume_url column for URL-based resume links
+    try {
+        await db.execute(`ALTER TABLE applications ADD COLUMN resume_url TEXT`);
+    } catch (e) {
+        // Ignore error if column already exists
+    }
+
     await db.execute(`CREATE INDEX IF NOT EXISTS idx_applications_user ON applications(user_id)`);
     await db.execute(`CREATE INDEX IF NOT EXISTS idx_applications_updated ON applications(updated_at)`);
 

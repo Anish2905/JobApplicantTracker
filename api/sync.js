@@ -31,7 +31,7 @@ module.exports = async (req, res) => {
             // Get all applications for user (including soft-deleted for sync)
             const lastSync = req.query.since || '1970-01-01T00:00:00.000Z';
             const result = await db.execute({
-                sql: `SELECT id, company, position, status, applied_date, url, notes, resume_id,
+                sql: `SELECT id, company, position, status, applied_date, url, notes, resume_id, resume_url,
                       created_at, updated_at, deleted_at 
                       FROM applications 
                       WHERE user_id = ? AND updated_at > ?
@@ -48,6 +48,7 @@ module.exports = async (req, res) => {
                 url: row.url,
                 notes: row.notes,
                 resumeId: row.resume_id,
+                resumeUrl: row.resume_url,
                 createdAt: row.created_at,
                 updatedAt: row.updated_at,
                 deletedAt: row.deleted_at
@@ -71,10 +72,10 @@ module.exports = async (req, res) => {
                     // Insert new
                     await db.execute({
                         sql: `INSERT INTO applications 
-                              (id, user_id, company, position, status, applied_date, url, notes, resume_id, created_at, updated_at, deleted_at)
-                              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                              (id, user_id, company, position, status, applied_date, url, notes, resume_id, resume_url, created_at, updated_at, deleted_at)
+                              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                         args: [app.id, userId, app.company, app.position, app.status || 'wishlist',
-                        app.appliedDate || null, app.url || null, app.notes || null, app.resumeId || null,
+                        app.appliedDate || null, app.url || null, app.notes || null, app.resumeId || null, app.resumeUrl || null,
                         app.createdAt, app.updatedAt, app.deletedAt || null]
                     });
                 } else {
@@ -84,10 +85,10 @@ module.exports = async (req, res) => {
                         await db.execute({
                             sql: `UPDATE applications SET 
                                   company = ?, position = ?, status = ?, applied_date = ?, 
-                                  url = ?, notes = ?, resume_id = ?, updated_at = ?, deleted_at = ?
+                                  url = ?, notes = ?, resume_id = ?, resume_url = ?, updated_at = ?, deleted_at = ?
                                   WHERE id = ? AND user_id = ?`,
                             args: [app.company, app.position, app.status, app.appliedDate || null,
-                            app.url || null, app.notes || null, app.resumeId || null, app.updatedAt, app.deletedAt || null,
+                            app.url || null, app.notes || null, app.resumeId || null, app.resumeUrl || null, app.updatedAt, app.deletedAt || null,
                             app.id, userId]
                         });
                     }
@@ -96,7 +97,7 @@ module.exports = async (req, res) => {
 
             // Return server changes since lastSync
             const result = await db.execute({
-                sql: `SELECT id, company, position, status, applied_date, url, notes, resume_id,
+                sql: `SELECT id, company, position, status, applied_date, url, notes, resume_id, resume_url,
                       created_at, updated_at, deleted_at 
                       FROM applications 
                       WHERE user_id = ? AND updated_at > ?
@@ -113,6 +114,7 @@ module.exports = async (req, res) => {
                 url: row.url,
                 notes: row.notes,
                 resumeId: row.resume_id,
+                resumeUrl: row.resume_url,
                 createdAt: row.created_at,
                 updatedAt: row.updated_at,
                 deletedAt: row.deleted_at
