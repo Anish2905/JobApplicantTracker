@@ -248,6 +248,17 @@ app.post('/api/applications/restore', authMiddleware, (req, res) => {
     }
 });
 
+// ===== Resume Sync (local dev - just acknowledge, storage is IndexedDB only) =====
+app.get('/api/resume-sync', authMiddleware, (req, res) => {
+    // Local dev: resumes are stored in IndexedDB, not server
+    res.json({ resumes: [] });
+});
+
+app.post('/api/resume-sync', authMiddleware, (req, res) => {
+    // Local dev: just acknowledge, actual storage is IndexedDB
+    res.json({ success: true });
+});
+
 // Serve frontend for all other routes
 app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, '../public/index.html'));
