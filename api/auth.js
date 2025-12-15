@@ -4,6 +4,14 @@ const { getDb, initSchema } = require('./_db');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'job-tracker-secret-change-in-production';
 
+// Check environment variables at startup
+if (!process.env.TURSO_DATABASE_URL) {
+    console.error('TURSO_DATABASE_URL is not set!');
+}
+if (!process.env.TURSO_AUTH_TOKEN) {
+    console.error('TURSO_AUTH_TOKEN is not set!');
+}
+
 function generateId() {
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
         const r = Math.random() * 16 | 0;
