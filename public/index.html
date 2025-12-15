@@ -908,6 +908,7 @@
             <div style="display: flex; align-items: center; gap: var(--space-3);">
                 <button class="btn btn-icon" id="themeToggle" aria-label="Toggle theme"
                     title="Toggle dark mode">🌙</button>
+                <button class="btn btn-icon" id="exportBtn" aria-label="Export to CSV" title="Export to CSV">📥</button>
                 <button class="btn btn-primary" id="addBtn">+ Add</button>
                 <button class="btn btn-secondary" id="logoutBtn">Logout</button>
             </div>
@@ -1176,6 +1177,39 @@
 
         function showToast(msg, showUndo = false, isError = false) { clearTimeout(toastTimeout); toastMessage.textContent = msg; toastUndo.style.display = showUndo ? 'inline-block' : 'none'; toast.classList.toggle('error', isError); toast.classList.add('visible'); toastTimeout = setTimeout(hideToast, showUndo ? 5000 : 2500); }
         function hideToast() { toast.classList.remove('visible'); if (!toastUndo.style.display || toastUndo.style.display === 'none') deletedApp = null; }
+
+        // ===== Export to CSV =====
+        function exportToCSV() {
+            if (!applications.length) { showToast('No applications to export', false, true); return; }
+            const headers = ['Company', 'Position', 'Status', 'Date Applied', 'URL', 'Notes', 'Created At'];
+            const escapeCSV = (val) => {
+                if (val == null) return '';
+                const str = String(val);
+                if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+                    return '"' + str.replace(/"/g, '""') + '"';
+                }
+                return str;
+            };
+            const rows = applications.map(app => [
+                escapeCSV(app.company),
+                escapeCSV(app.position),
+                escapeCSV(app.status),
+                escapeCSV(app.appliedDate),
+                escapeCSV(app.url),
+                escapeCSV(app.notes),
+                escapeCSV(app.createdAt)
+            ].join(','));
+            const csv = [headers.join(','), ...rows].join('\n');
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `job-applications-${new Date().toISOString().split('T')[0]}.csv`;
+            a.click();
+            URL.revokeObjectURL(url);
+            showToast(`Exported ${applications.length} applications`);
+        }
+        document.getElementById('exportBtn').addEventListener('click', exportToCSV);
 
         document.getElementById('addBtn').addEventListener('click', () => openModal());
         document.getElementById('addBtnEmpty').addEventListener('click', () => openModal());
