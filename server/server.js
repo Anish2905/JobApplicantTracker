@@ -250,7 +250,9 @@ app.post('/api/applications/restore', authMiddleware, (req, res) => {
 
 // ===== Resume Sync (local dev - just acknowledge, storage is IndexedDB only) =====
 app.get('/api/resume-sync', authMiddleware, (req, res) => {
-    // Local dev: resumes are stored in IndexedDB, not server
+    // Local dev: resumes are stored in IndexedDB, not server.
+    // Return 404 for single fetch to test failover, or empty list for sync.
+    if (req.query.id) return res.status(404).json({ error: 'Not found locally' });
     res.json({ resumes: [] });
 });
 

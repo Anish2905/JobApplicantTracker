@@ -28,9 +28,35 @@ module.exports = async (req, res) => {
         const db = getDb();
 
         if (req.method === 'GET') {
-            // Get all resumes for user
+            const { id } = req.query;
+
+            // 1. Fetch Request: Get single resume with FULL data
+            if (id) {
+                const result = await db.execute({
+                    sql: `SELECT id, name, file_name, file_data, file_type, created_at, updated_at 
+                          FROM resumes WHERE id = ? AND user_id = ? AND deleted_at IS NULL`,
+                    args: [id, userId]
+                });
+
+                if (result.rows.length === 0) return res.status(404).json({ error: 'Resume not found' });
+
+                const row = result.rows[0];
+                return res.json({
+                    resume: {
+                        id: row.id,
+                        name: row.name,
+                        fileName: row.file_name,
+                        fileData: row.file_data, // Send data only when requested
+                        fileType: row.file_type,
+                        createdAt: row.created_at,
+                        updatedAt: row.updated_at
+                    }
+                });
+            }
+
+            // 2. Sync Request: Get ALL resumes metadata ONLY (no file_data)
             const result = await db.execute({
-                sql: `SELECT id, name, file_name, file_data, file_type, created_at, updated_at, deleted_at 
+                sql: `SELECT id, name, file_name, file_type, created_at, updated_at 
                       FROM resumes WHERE user_id = ? AND deleted_at IS NULL
                       ORDER BY created_at DESC`,
                 args: [userId]
@@ -40,7 +66,7 @@ module.exports = async (req, res) => {
                 id: row.id,
                 name: row.name,
                 fileName: row.file_name,
-                fileData: row.file_data,
+                // fileData omitted for list view
                 fileType: row.file_type,
                 createdAt: row.created_at,
                 updatedAt: row.updated_at

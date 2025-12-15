@@ -2075,7 +2075,7 @@
         // Track current resume for viewing
         let currentLinkedResumeId = null;
 
-        // Sync resumes from cloud on load
+        // Sync resumes from cloud on load (Metadata only first)
         async function syncResumesFromCloud() {
             const token = getToken();
             if (!token) return;
@@ -2085,11 +2085,66 @@
                 });
                 if (res.ok) {
                     const { resumes } = await res.json();
+                    // Merge strategy:
+                    // 1. If we have full fileData locally, KEEP IT.
+                    // 2. If we don't have it locally, save the metadata (shell).
                     for (const r of resumes) {
+                        const local = await getResumeById(r.id);
+                        if (local && local.fileData) {
+                            // We have the full file, don't overwrite with metadata-only version
+                            continue;
+                        }
                         await saveResume(r);
                     }
                 }
             } catch (e) { console.error('Resume sync failed:', e); }
+        }
+
+        // View linked resume (Fetch on demand if missing data)
+        async function viewLinkedResume() {
+            if (!currentLinkedResumeId) return;
+            let resume = await getResumeById(currentLinkedResumeId);
+
+            // If we have metadata but no fileData, fetch it now
+            if (resume && !resume.fileData) {
+                showToast('Downloading resume...', false);
+                try {
+                    const token = getToken();
+                    const res = await fetch(`${API_BASE}/resume-sync?id=${currentLinkedResumeId}`, {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+
+                    if (res.ok) {
+                        const data = await res.json();
+                        if (data.resume && data.resume.fileData) {
+                            resume = data.resume;
+                            // Save full data for next time
+                            await saveResume(resume);
+                        }
+                    } else {
+                        throw new Error('Download failed');
+                    }
+                } catch (e) {
+                    showToast('Failed to download resume', false, true);
+                    return;
+                }
+            }
+
+            if (!resume || !resume.fileData) {
+                showToast('Resume not found', false, true);
+                return;
+            }
+            // Open in new tab
+            const win = window.open('', '_blank');
+            if (resume.fileType === 'application/pdf') {
+                win.document.write(`<iframe src="${resume.fileData}" style="width:100%;height:100%;border:none;"></iframe>`);
+            } else {
+                // Download non-PDF files
+                const a = document.createElement('a');
+                a.href = resume.fileData;
+                a.download = resume.fileName;
+                a.click();
+            }
         }
 
         // Show/hide resume UI based on whether resumeId exists
@@ -2112,27 +2167,7 @@
             currentLinkedResumeId = null;
         }
 
-        // View linked resume
-        async function viewLinkedResume() {
-            if (!currentLinkedResumeId) return;
-            const resume = await getResumeById(currentLinkedResumeId);
-            if (!resume || !resume.fileData) {
-                showToast('Resume not found', false, true);
-                return;
-            }
-            // Open in new tab
-            const win = window.open('', '_blank');
-            if (resume.fileType === 'application/pdf') {
-                win.document.write(`<iframe src="${resume.fileData}" style="width:100%;height:100%;border:none;"></iframe>`);
-            } else {
-                // Download non-PDF files
-                const a = document.createElement('a');
-                a.href = resume.fileData;
-                a.download = resume.fileName;
-                a.click();
-            }
-        }
-        window.viewLinkedResume = viewLinkedResume;
+        // viewLinkedResume is defined above with fetch-on-demand logic
 
         // Unlink resume from current form
         function unlinkResume() {
