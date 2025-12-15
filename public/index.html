@@ -2092,19 +2092,6 @@
             } catch (e) { console.error('Resume sync failed:', e); }
         }
 
-        // Upload resume to cloud
-        async function syncResumeToCloud(resume) {
-            const token = getToken();
-            if (!token) return;
-            try {
-                await fetch(`${API_BASE}/resume-sync`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                    body: JSON.stringify({ action: 'upload', resume })
-                });
-            } catch (e) { console.error('Resume cloud sync failed:', e); }
-        }
-
         // Show/hide resume UI based on whether resumeId exists
         async function showResumeUI(resumeId) {
             if (resumeId) {
@@ -2161,6 +2148,14 @@
             const file = e.target.files[0];
             if (!file) return;
 
+            // Vercel serverless limit is 4.5MB. Base64 increases size by ~33%.
+            // Limit file to 3MB to be safe.
+            if (file.size > 3 * 1024 * 1024) {
+                showToast('File too large (max 3MB)', false, true);
+                resumeUpload.value = '';
+                return;
+            }
+
             const reader = new FileReader();
             reader.onload = async () => {
                 const resume = {
@@ -2172,14 +2167,43 @@
                     createdAt: new Date().toISOString(),
                     updatedAt: new Date().toISOString()
                 };
-                await saveResume(resume);
-                await syncResumeToCloud(resume);
-                await showResumeUI(resume.id);
-                showToast(`Resume "${file.name}" uploaded`);
+
+                try {
+                    await saveResume(resume);
+                    await syncResumeToCloud(resume);
+                    await showResumeUI(resume.id);
+                    showToast(`Resume "${file.name}" uploaded`);
+                } catch (err) {
+                    console.error('Upload failed:', err);
+                    showToast('Upload failed', false, true);
+                }
                 resumeUpload.value = '';
             };
             reader.readAsDataURL(file);
         });
+
+        // Improved syncResumeToCloud with error handling
+        async function syncResumeToCloud(resume) {
+            const token = getToken();
+            if (!token) return;
+            try {
+                const res = await fetch(`${API_BASE}/resume-sync`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    body: JSON.stringify({ action: 'upload', resume })
+                });
+
+                if (!res.ok) {
+                    const text = await res.text();
+                    console.error('Resume sync error response:', text);
+                    if (res.status === 413) throw new Error('File too large for cloud');
+                    throw new Error(`Server error: ${res.status}`);
+                }
+            } catch (e) {
+                console.error('Resume cloud sync failed:', e);
+                // We don't throw here so local save still works/shows
+            }
+        }
 
         // Sync resumes when app loads
         syncResumesFromCloud();
