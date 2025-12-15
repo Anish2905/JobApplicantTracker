@@ -248,17 +248,92 @@ app.post('/api/applications/restore', authMiddleware, (req, res) => {
     }
 });
 
-// ===== Resume Sync (local dev - just acknowledge, storage is IndexedDB only) =====
+// ===== Resume Sync (Full Implementation) =====
+// Ensure resumes table exists
+db.exec(`
+  CREATE TABLE IF NOT EXISTS resumes (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    file_name TEXT NOT NULL,
+    file_data TEXT NOT NULL,
+    file_type TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    deleted_at TEXT,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  )
+`);
+
 app.get('/api/resume-sync', authMiddleware, (req, res) => {
-    // Local dev: resumes are stored in IndexedDB, not server.
-    // Return 404 for single fetch to test failover, or empty list for sync.
-    if (req.query.id) return res.status(404).json({ error: 'Not found locally' });
-    res.json({ resumes: [] });
+    try {
+        const { id } = req.query;
+        // 1. Single Fetch (Full Data)
+        if (id) {
+            const row = db.prepare('SELECT * FROM resumes WHERE id = ? AND user_id = ? AND deleted_at IS NULL').get(id, req.userId);
+            if (!row) return res.status(404).json({ error: 'Resume not found' });
+            return res.json({
+                resume: {
+                    id: row.id,
+                    name: row.name,
+                    fileName: row.file_name,
+                    fileData: row.file_data,
+                    fileType: row.file_type,
+                    createdAt: row.created_at,
+                    updatedAt: row.updated_at
+                }
+            });
+        }
+
+        // 2. List Fetch (Metadata Only)
+        // Note: better-sqlite3 uses .all() for multiple rows
+        const rows = db.prepare(`
+            SELECT id, name, file_name, file_type, created_at, updated_at 
+            FROM resumes WHERE user_id = ? AND deleted_at IS NULL 
+            ORDER BY created_at DESC
+        `).all(req.userId);
+
+        const resumes = rows.map(row => ({
+            id: row.id,
+            name: row.name,
+            fileName: row.file_name,
+            // No fileData
+            fileType: row.file_type,
+            createdAt: row.created_at,
+            updatedAt: row.updated_at
+        }));
+        res.json({ resumes });
+
+    } catch (e) {
+        console.error('Resume GET error:', e);
+        res.status(500).json({ error: 'Server error' });
+    }
 });
 
 app.post('/api/resume-sync', authMiddleware, (req, res) => {
-    // Local dev: just acknowledge, actual storage is IndexedDB
-    res.json({ success: true });
+    try {
+        const { action, resume } = req.body;
+
+        if (action === 'upload') {
+            const stmt = db.prepare(`
+                INSERT OR REPLACE INTO resumes (id, user_id, name, file_name, file_data, file_type, created_at, updated_at, deleted_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)
+            `);
+            stmt.run(resume.id, req.userId, resume.name, resume.fileName, resume.fileData, resume.fileType, resume.createdAt, resume.updatedAt);
+            return res.json({ success: true });
+        }
+
+        if (action === 'delete') {
+            const stmt = db.prepare('UPDATE resumes SET deleted_at = ?, updated_at = ? WHERE id = ? AND user_id = ?');
+            stmt.run(new Date().toISOString(), new Date().toISOString(), resume.id, req.userId);
+            return res.json({ success: true });
+        }
+
+        res.status(400).json({ error: 'Invalid action' });
+    } catch (e) {
+        console.error('Resume POST error:', e);
+        res.status(500).json({ error: 'Server error' });
+    }
 });
 
 // ===== App Sync (local dev - just acknowledge) =====
