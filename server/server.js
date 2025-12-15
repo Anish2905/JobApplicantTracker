@@ -236,9 +236,9 @@ app.post('/api/applications/restore', authMiddleware, (req, res) => {
         const { id, company, position, status, appliedDate, url, notes, createdAt, updatedAt } = req.body;
 
         db.run(`
-      INSERT INTO applications (id, user_id, company, position, status, applied_date, url, notes, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [id, req.userId, company, position, status, appliedDate || null, url || null, notes || null, createdAt, updatedAt]);
+      INSERT INTO applications (id, user_id, company, position, status, applied_date, url, notes, resume_id, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [id, req.userId, company, position, status, appliedDate || null, url || null, notes || null, req.body.resumeId || null, createdAt, updatedAt]);
 
         saveDatabase();
         res.status(201).json({ success: true });

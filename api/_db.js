@@ -32,12 +32,21 @@ async function initSchema() {
             applied_date TEXT,
             url TEXT,
             notes TEXT,
+            resume_id TEXT,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL,
             deleted_at TEXT,
             FOREIGN KEY (user_id) REFERENCES users(id)
         )
     `);
+
+    // Migration: ensure resume_id column exists for existing tables
+    try {
+        await db.execute(`ALTER TABLE applications ADD COLUMN resume_id TEXT`);
+    } catch (e) {
+        // Ignore error if column already exists
+    }
+
     await db.execute(`CREATE INDEX IF NOT EXISTS idx_applications_user ON applications(user_id)`);
     await db.execute(`CREATE INDEX IF NOT EXISTS idx_applications_updated ON applications(updated_at)`);
 
