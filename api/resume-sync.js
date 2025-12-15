@@ -32,15 +32,33 @@ module.exports = async (req, res) => {
 
             // 1. Fetch Request: Get single resume with FULL data
             if (id) {
+                console.log(`[Resume API] GET single resume. userId=${userId}, resumeId=${id}`);
+
                 const result = await db.execute({
                     sql: `SELECT id, name, file_name, file_data, file_type, created_at, updated_at 
                           FROM resumes WHERE id = ? AND user_id = ? AND deleted_at IS NULL`,
                     args: [id, userId]
                 });
 
-                if (result.rows.length === 0) return res.status(404).json({ error: 'Resume not found' });
+                console.log(`[Resume API] Query returned ${result.rows.length} rows`);
+
+                if (result.rows.length === 0) {
+                    console.log(`[Resume API] Resume NOT FOUND. Checking if exists with different user...`);
+                    // Debug: Check if resume exists but belongs to different user
+                    const anyUser = await db.execute({
+                        sql: `SELECT user_id FROM resumes WHERE id = ?`,
+                        args: [id]
+                    });
+                    if (anyUser.rows.length > 0) {
+                        console.log(`[Resume API] Resume exists but belongs to user: ${anyUser.rows[0].user_id}`);
+                    } else {
+                        console.log(`[Resume API] Resume ID does not exist in database at all`);
+                    }
+                    return res.status(404).json({ error: 'Resume not found' });
+                }
 
                 const row = result.rows[0];
+                console.log(`[Resume API] Returning resume: ${row.file_name}, dataLength=${row.file_data?.length || 0}`);
                 return res.json({
                     resume: {
                         id: row.id,
@@ -79,6 +97,7 @@ module.exports = async (req, res) => {
             const { action, resume } = req.body;
 
             if (action === 'upload') {
+                console.log(`[Resume API] POST upload. userId=${userId}, resumeId=${resume.id}, fileName=${resume.fileName}`);
                 // Upload new resume
                 await db.execute({
                     sql: `INSERT INTO resumes (id, user_id, name, file_name, file_data, file_type, created_at, updated_at)
@@ -86,6 +105,7 @@ module.exports = async (req, res) => {
                     args: [resume.id, userId, resume.name, resume.fileName, resume.fileData,
                     resume.fileType, resume.createdAt, resume.updatedAt]
                 });
+                console.log(`[Resume API] Upload SUCCESS for resumeId=${resume.id}`);
                 return res.json({ success: true });
             }
 
