@@ -259,6 +259,17 @@ app.post('/api/resume-sync', authMiddleware, (req, res) => {
     res.json({ success: true });
 });
 
+// ===== App Sync (local dev - just acknowledge) =====
+app.get('/api/sync', authMiddleware, (req, res) => {
+    // Local dev: apps are stored via CRUD, minimal sync needed
+    res.json({ applications: [], serverTime: new Date().toISOString() });
+});
+
+app.post('/api/sync', authMiddleware, (req, res) => {
+    // Local dev: acknowledge changes
+    res.json({ applications: [], serverTime: new Date().toISOString() });
+});
+
 // Serve frontend for all other routes
 app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, '../public/index.html'));

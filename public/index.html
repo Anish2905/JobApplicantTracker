@@ -2252,7 +2252,7 @@
         const originalOpenModal = openModal;
         openModal = async function (isEdit = false) {
             if (!isEdit) {
-                await showResumeSection(null); // New app - show upload section
+                await showResumeUI(null); // New app - show upload section
             }
             originalOpenModal(isEdit);
         };
