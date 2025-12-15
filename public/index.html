@@ -369,13 +369,43 @@
         }
 
         /* ===== Auth Page ===== */
+        @keyframes gradientFlow {
+            0% {
+                background-position: 0% 50%;
+            }
+
+            50% {
+                background-position: 100% 50%;
+            }
+
+            100% {
+                background-position: 0% 50%;
+            }
+        }
+
         .auth-container {
             display: flex;
             align-items: center;
             justify-content: center;
             min-height: 100vh;
             padding: var(--space-5);
-            background: linear-gradient(135deg, hsl(var(--hue-primary), 85%, 97%) 0%, hsl(200, 80%, 97%) 100%);
+            background: linear-gradient(-45deg,
+                    hsl(var(--hue-primary), 85%, 95%),
+                    hsl(200, 80%, 95%),
+                    hsl(280, 70%, 95%),
+                    hsl(var(--hue-primary), 85%, 95%));
+            background-size: 400% 400%;
+            animation: gradientFlow 15s ease infinite;
+        }
+
+        [data-theme="dark"] .auth-container {
+            background: linear-gradient(-45deg,
+                    hsl(var(--hue-primary), 40%, 12%),
+                    hsl(200, 40%, 12%),
+                    hsl(280, 40%, 12%),
+                    hsl(var(--hue-primary), 40%, 12%));
+            background-size: 400% 400%;
+            animation: gradientFlow 15s ease infinite;
         }
 
         .auth-card {
@@ -955,6 +985,102 @@
             background: hsla(0, 0%, 100%, 0.3);
         }
 
+        /* Skeleton Loading */
+        @keyframes skeletonShimmer {
+            0% {
+                background-position: -200px 0;
+            }
+
+            100% {
+                background-position: calc(200px + 100%) 0;
+            }
+        }
+
+        .skeleton {
+            background: linear-gradient(90deg,
+                    var(--color-border) 0%,
+                    var(--color-surface-elevated) 50%,
+                    var(--color-border) 100%);
+            background-size: 200px 100%;
+            animation: skeletonShimmer 1.5s ease-in-out infinite;
+            border-radius: var(--radius-sm);
+        }
+
+        .skeleton-card {
+            height: 100px;
+            border-radius: var(--radius-md);
+            margin-bottom: var(--space-3);
+        }
+
+        .skeleton-text {
+            height: 16px;
+            margin-bottom: var(--space-2);
+        }
+
+        .skeleton-text.short {
+            width: 60%;
+        }
+
+        /* Pull to Refresh Indicator */
+        .pull-indicator {
+            position: fixed;
+            top: -50px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--color-surface);
+            padding: var(--space-3) var(--space-5);
+            border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+            box-shadow: var(--shadow-card);
+            font-size: var(--font-size-sm);
+            color: var(--color-text-secondary);
+            transition: top 0.3s ease;
+            z-index: 100;
+        }
+
+        .pull-indicator.visible {
+            top: 0;
+        }
+
+        /* Quick Status Edit Dropdown */
+        .status-badge {
+            cursor: pointer;
+            transition: transform var(--transition-fast);
+        }
+
+        .status-badge:hover {
+            transform: scale(1.05);
+        }
+
+        .status-dropdown {
+            position: absolute;
+            top: 100%;
+            right: 0;
+            background: var(--color-surface);
+            border-radius: var(--radius-md);
+            box-shadow: var(--shadow-modal);
+            padding: var(--space-2);
+            z-index: 50;
+            min-width: 140px;
+            display: none;
+        }
+
+        .status-dropdown.active {
+            display: block;
+            animation: fadeInUp 0.15s ease-out;
+        }
+
+        .status-option {
+            padding: var(--space-2) var(--space-3);
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            font-size: var(--font-size-sm);
+            transition: background var(--transition-fast);
+        }
+
+        .status-option:hover {
+            background: var(--color-bg);
+        }
+
         .hidden {
             display: none !important;
         }
@@ -1087,6 +1213,9 @@
             </form>
         </div>
     </div>
+
+    <!-- Pull to Refresh -->
+    <div class="pull-indicator" id="pullIndicator">↻ Pull to refresh</div>
 
     <!-- App View -->
     <div class="container hidden" id="appView">
@@ -1525,7 +1654,30 @@
             filtered.sort((a, b) => sort === 'newest' ? new Date(b.createdAt) - new Date(a.createdAt) : sort === 'oldest' ? new Date(a.createdAt) - new Date(b.createdAt) : a.company.localeCompare(b.company));
             if (!filtered.length) { appList.innerHTML = ''; emptyState.classList.remove('hidden'); return; }
             emptyState.classList.add('hidden');
-            appList.innerHTML = filtered.map(app => `<div class="app-card" data-id="${app.id}"><div class="app-card-main"><div class="app-company">${escapeHtml(app.company)}</div><div class="app-position">${escapeHtml(app.position)}</div><div class="app-meta"><span class="app-status status-${app.status}">${app.status}</span>${app.appliedDate ? `<span class="app-meta-item">${formatDate(app.appliedDate)}</span>` : ''}${app.url ? `<a href="${escapeHtml(app.url)}" target="_blank" rel="noopener">View posting →</a>` : ''}</div>${app.notes ? `<div class="app-notes">${escapeHtml(app.notes)}</div>` : ''}</div><div class="app-card-actions"><button class="btn btn-icon" onclick="editApp('${app.id}')" aria-label="Edit">✏️</button><button class="btn btn-icon" onclick="deleteApp('${app.id}')" aria-label="Delete">🗑️</button></div></div>`).join('');
+            const statuses = ['wishlist', 'applied', 'interview', 'offer', 'accepted', 'rejected'];
+            appList.innerHTML = filtered.map(app => `
+                <div class="app-card" data-id="${app.id}">
+                    <div class="app-card-main">
+                        <div class="app-company">${escapeHtml(app.company)}</div>
+                        <div class="app-position">${escapeHtml(app.position)}</div>
+                        <div class="app-card-meta" style="position: relative;">
+                            <span class="app-status status-${app.status} status-badge" onclick="event.stopPropagation(); this.nextElementSibling.classList.toggle('active');">
+                                ${app.status}
+                            </span>
+                            <div class="status-dropdown">
+                                ${statuses.map(s => `<div class="status-option status-${s}" onclick="event.stopPropagation(); quickStatusChange('${app.id}', '${s}');">${s}</div>`).join('')}
+                            </div>
+                            ${app.appliedDate ? `<span class="app-meta-item">${formatDate(app.appliedDate)}</span>` : ''}
+                            ${app.url ? `<a href="${escapeHtml(app.url)}" target="_blank" rel="noopener">View posting →</a>` : ''}
+                        </div>
+                        ${app.notes ? `<div class="app-notes">${escapeHtml(app.notes)}</div>` : ''}
+                    </div>
+                    <div class="app-card-actions">
+                        <button class="btn btn-icon" onclick="editApp('${app.id}')" aria-label="Edit">✏️</button>
+                        <button class="btn btn-icon" onclick="deleteApp('${app.id}')" aria-label="Delete">🗑️</button>
+                    </div>
+                </div>
+            `).join('');
         }
         function escapeHtml(s) { return s ? s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;') : ''; }
         function formatDate(d) { try { return new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }); } catch { return d; } }
@@ -1672,6 +1824,59 @@
         document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && modalBackdrop.classList.contains('active')) closeModal(); });
 
         if (getToken()) showApp(); else showAuth();
+
+        // ===== Pull to Refresh =====
+        const pullIndicator = document.getElementById('pullIndicator');
+        let touchStartY = 0;
+        let isPulling = false;
+
+        document.addEventListener('touchstart', (e) => {
+            if (window.scrollY === 0) touchStartY = e.touches[0].clientY;
+        });
+
+        document.addEventListener('touchmove', (e) => {
+            if (touchStartY === 0) return;
+            const touchY = e.touches[0].clientY;
+            const diff = touchY - touchStartY;
+            if (diff > 60 && window.scrollY === 0) {
+                isPulling = true;
+                pullIndicator.classList.add('visible');
+            }
+        });
+
+        document.addEventListener('touchend', async () => {
+            if (isPulling) {
+                pullIndicator.textContent = '↻ Refreshing...';
+                await syncFromCloud();
+                render();
+                showToast('Refreshed');
+                pullIndicator.textContent = '↻ Pull to refresh';
+            }
+            pullIndicator.classList.remove('visible');
+            touchStartY = 0;
+            isPulling = false;
+        });
+
+        // ===== Quick Status Edit =====
+        async function quickStatusChange(id, newStatus) {
+            const existing = await getLocalById(id);
+            if (!existing) return;
+            const updated = { ...existing, status: newStatus, updatedAt: new Date().toISOString() };
+            await saveLocal(updated);
+            addPendingChange(id);
+            const idx = applications.findIndex(a => a.id === id);
+            if (idx !== -1) applications[idx] = updated;
+            render();
+            showToast(`Status → ${newStatus.charAt(0).toUpperCase() + newStatus.slice(1)}`);
+            syncToCloud();
+        }
+
+        // Close status dropdowns when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.app-card-meta')) {
+                document.querySelectorAll('.status-dropdown.active').forEach(d => d.classList.remove('active'));
+            }
+        });
     </script>
 </body>
 
