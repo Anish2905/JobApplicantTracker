@@ -650,7 +650,32 @@
             opacity: 0.7;
         }
 
-        /* Premium gradient accent bar */
+        /* Status-based left border colors */
+        .app-card.status-wishlist {
+            border-left: 4px solid var(--color-wishlist);
+        }
+
+        .app-card.status-applied {
+            border-left: 4px solid var(--color-applied);
+        }
+
+        .app-card.status-interview {
+            border-left: 4px solid var(--color-interview);
+        }
+
+        .app-card.status-offer {
+            border-left: 4px solid var(--color-offer);
+        }
+
+        .app-card.status-accepted {
+            border-left: 4px solid var(--color-accepted);
+        }
+
+        .app-card.status-rejected {
+            border-left: 4px solid var(--color-rejected);
+        }
+
+        /* Premium gradient accent bar - only shows on hover for non-status cards */
         .app-card::before {
             content: '';
             position: absolute;
@@ -667,7 +692,8 @@
             opacity: 1;
         }
 
-        /* Don't override interview highlight border */
+        /* Don't show hover border if status border is already there */
+        .app-card[class*="status-"]::before,
         .app-card.interview-highlight::before {
             display: none;
         }
@@ -1886,7 +1912,7 @@
                 ` : '';
 
                 return `
-                <div class="app-card ${app.status === 'interview' ? 'interview-highlight' : ''}" data-id="${app.id}">
+                <div class="app-card status-${app.status} ${app.status === 'interview' ? 'interview-highlight' : ''}" data-id="${app.id}">
                     <div class="app-card-main">
                         <div class="app-company">${escapeHtml(app.company)}</div>
                         <div class="app-position">${escapeHtml(app.position)}</div>
