@@ -2055,6 +2055,36 @@
         const resumeUpload = document.getElementById('resumeUpload');
         const resumeIdSelect = document.getElementById('resumeId');
 
+        // Sync resumes from cloud on load
+        async function syncResumesFromCloud() {
+            const token = getToken();
+            if (!token) return;
+            try {
+                const res = await fetch(`${API_BASE}/resume-sync`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (res.ok) {
+                    const { resumes } = await res.json();
+                    for (const r of resumes) {
+                        await saveResume(r); // Save to local IndexedDB
+                    }
+                }
+            } catch (e) { console.error('Resume sync failed:', e); }
+        }
+
+        // Upload resume to cloud
+        async function syncResumeToCloud(resume) {
+            const token = getToken();
+            if (!token) return;
+            try {
+                await fetch(`${API_BASE}/resume-sync`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    body: JSON.stringify({ action: 'upload', resume })
+                });
+            } catch (e) { console.error('Resume cloud sync failed:', e); }
+        }
+
         async function populateResumeDropdown(selectedId = '') {
             const resumes = await getAllResumes();
             resumeIdSelect.innerHTML = '<option value="">-- Select Resume --</option>' +
@@ -2077,12 +2107,16 @@
                     updatedAt: new Date().toISOString()
                 };
                 await saveResume(resume);
+                await syncResumeToCloud(resume); // Sync to cloud
                 await populateResumeDropdown(resume.id);
-                showToast(`Resume "${resume.name}" saved`);
+                showToast(`Resume "${resume.name}" saved & synced`);
                 resumeUpload.value = '';
             };
             reader.readAsDataURL(file);
         });
+
+        // Sync resumes when app loads
+        syncResumesFromCloud();
 
         // ===== Interview Modal Handling =====
         const interviewModalBackdrop = document.getElementById('interviewModalBackdrop');
