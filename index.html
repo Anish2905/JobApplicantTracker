@@ -1,0 +1,823 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Job Applicant Tracker</title>
+  <meta name="description" content="Track your job applications, interviews, and offers in one place.">
+  <style>
+    /* ===== Design Tokens ===== */
+    :root {
+      /* HSL Color Palette */
+      --color-primary-h: 220;
+      --color-primary-s: 70%;
+      --color-primary-l: 50%;
+      --color-primary: hsl(var(--color-primary-h), var(--color-primary-s), var(--color-primary-l));
+      --color-primary-hover: hsl(var(--color-primary-h), var(--color-primary-s), 40%);
+      
+      --color-bg: hsl(220, 15%, 97%);
+      --color-surface: hsl(0, 0%, 100%);
+      --color-text: hsl(220, 20%, 15%);
+      --color-text-secondary: hsl(220, 10%, 45%);
+      --color-border: hsl(220, 15%, 88%);
+      
+      /* Status Colors (HSL) */
+      --color-wishlist: hsl(200, 70%, 50%);
+      --color-applied: hsl(280, 60%, 55%);
+      --color-interview: hsl(40, 90%, 50%);
+      --color-offer: hsl(150, 60%, 45%);
+      --color-accepted: hsl(140, 70%, 40%);
+      --color-rejected: hsl(0, 65%, 55%);
+      
+      /* Shadow Elevation System */
+      --shadow-button: 0 1px 2px hsla(220, 20%, 15%, 0.15);
+      --shadow-card: 0 4px 8px hsla(220, 20%, 15%, 0.1);
+      --shadow-modal: 0 12px 24px hsla(220, 20%, 15%, 0.2);
+      
+      /* Spacing Scale */
+      --space-1: 4px;
+      --space-2: 8px;
+      --space-3: 12px;
+      --space-4: 16px;
+      --space-5: 24px;
+      --space-6: 32px;
+      --space-7: 48px;
+      
+      /* Typography */
+      --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      --line-height-body: 1.5;
+      --line-height-heading: 1.2;
+    }
+
+    /* ===== Reset & Base ===== */
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: var(--font-family);
+      background: var(--color-bg);
+      color: var(--color-text);
+      line-height: var(--line-height-body);
+      min-height: 100vh;
+    }
+
+    /* ===== Layout ===== */
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: var(--space-4);
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: var(--space-5);
+      flex-wrap: wrap;
+      gap: var(--space-3);
+    }
+
+    h1 {
+      font-size: 24px;
+      line-height: var(--line-height-heading);
+      font-weight: 600;
+    }
+
+    /* ===== Buttons ===== */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: var(--space-2);
+      min-height: 44px;
+      min-width: 44px;
+      padding: var(--space-2) var(--space-4);
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background-color 0.15s, transform 0.1s;
+      box-shadow: var(--shadow-button);
+    }
+
+    .btn:active {
+      transform: scale(0.98);
+    }
+
+    .btn-primary {
+      background: var(--color-primary);
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background: var(--color-primary-hover);
+    }
+
+    .btn-secondary {
+      background: var(--color-surface);
+      color: var(--color-text);
+      border: 1px solid var(--color-border);
+    }
+
+    .btn-secondary:hover {
+      background: var(--color-bg);
+    }
+
+    .btn-danger {
+      background: hsl(0, 65%, 55%);
+      color: white;
+    }
+
+    .btn-danger:hover {
+      background: hsl(0, 65%, 45%);
+    }
+
+    .btn-icon {
+      padding: var(--space-2);
+      background: transparent;
+      box-shadow: none;
+    }
+
+    .btn-icon:hover {
+      background: var(--color-bg);
+    }
+
+    /* ===== Stats Bar ===== */
+    .stats-bar {
+      display: flex;
+      gap: var(--space-2);
+      flex-wrap: wrap;
+      margin-bottom: var(--space-5);
+    }
+
+    .stat {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      padding: var(--space-2) var(--space-3);
+      background: var(--color-surface);
+      border-radius: 8px;
+      font-size: 13px;
+      box-shadow: var(--shadow-button);
+    }
+
+    .stat-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+    }
+
+    .stat-count {
+      font-weight: 600;
+    }
+
+    /* ===== Controls ===== */
+    .controls {
+      display: flex;
+      gap: var(--space-3);
+      margin-bottom: var(--space-4);
+      flex-wrap: wrap;
+    }
+
+    .select-wrap {
+      position: relative;
+    }
+
+    select {
+      appearance: none;
+      min-height: 44px;
+      padding: var(--space-2) var(--space-6) var(--space-2) var(--space-3);
+      border: 1px solid var(--color-border);
+      border-radius: 8px;
+      background: var(--color-surface);
+      font-size: 14px;
+      cursor: pointer;
+    }
+
+    select:focus {
+      outline: 2px solid var(--color-primary);
+      outline-offset: 2px;
+    }
+
+    .select-wrap::after {
+      content: '▼';
+      position: absolute;
+      right: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 10px;
+      pointer-events: none;
+      color: var(--color-text-secondary);
+    }
+
+    /* ===== Application Cards ===== */
+    .app-list {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-3);
+    }
+
+    .app-card {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: var(--space-3);
+      padding: var(--space-4);
+      background: var(--color-surface);
+      border-radius: 12px;
+      box-shadow: var(--shadow-card);
+    }
+
+    .app-card-main {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-1);
+    }
+
+    .app-company {
+      font-size: 16px;
+      font-weight: 600;
+      line-height: var(--line-height-heading);
+    }
+
+    .app-position {
+      color: var(--color-text-secondary);
+      font-size: 14px;
+    }
+
+    .app-meta {
+      display: flex;
+      align-items: center;
+      gap: var(--space-3);
+      margin-top: var(--space-2);
+      font-size: 13px;
+      color: var(--color-text-secondary);
+    }
+
+    .app-status {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-1);
+      padding: var(--space-1) var(--space-2);
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 500;
+      text-transform: capitalize;
+    }
+
+    .app-card-actions {
+      display: flex;
+      gap: var(--space-1);
+      align-items: flex-start;
+    }
+
+    /* Status Badge Colors */
+    .status-wishlist { background: hsla(200, 70%, 50%, 0.15); color: hsl(200, 70%, 35%); }
+    .status-applied { background: hsla(280, 60%, 55%, 0.15); color: hsl(280, 60%, 40%); }
+    .status-interview { background: hsla(40, 90%, 50%, 0.15); color: hsl(40, 90%, 35%); }
+    .status-offer { background: hsla(150, 60%, 45%, 0.15); color: hsl(150, 60%, 30%); }
+    .status-accepted { background: hsla(140, 70%, 40%, 0.15); color: hsl(140, 70%, 25%); }
+    .status-rejected { background: hsla(0, 65%, 55%, 0.15); color: hsl(0, 65%, 40%); }
+
+    /* Stat Dot Colors */
+    .dot-wishlist { background: var(--color-wishlist); }
+    .dot-applied { background: var(--color-applied); }
+    .dot-interview { background: var(--color-interview); }
+    .dot-offer { background: var(--color-offer); }
+    .dot-accepted { background: var(--color-accepted); }
+    .dot-rejected { background: var(--color-rejected); }
+
+    /* ===== Empty State ===== */
+    .empty-state {
+      text-align: center;
+      padding: var(--space-7);
+      color: var(--color-text-secondary);
+    }
+
+    .empty-state-icon {
+      font-size: 48px;
+      margin-bottom: var(--space-4);
+      opacity: 0.5;
+    }
+
+    .empty-state h2 {
+      font-size: 18px;
+      margin-bottom: var(--space-2);
+      color: var(--color-text);
+    }
+
+    .empty-state p {
+      margin-bottom: var(--space-4);
+    }
+
+    /* ===== Modal ===== */
+    .modal-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: hsla(220, 20%, 15%, 0.5);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+      padding: var(--space-4);
+    }
+
+    .modal-backdrop.active {
+      display: flex;
+    }
+
+    .modal {
+      width: 100%;
+      max-width: 480px;
+      max-height: 90vh;
+      overflow-y: auto;
+      background: var(--color-surface);
+      border-radius: 16px;
+      box-shadow: var(--shadow-modal);
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: var(--space-4);
+      border-bottom: 1px solid var(--color-border);
+    }
+
+    .modal-header h2 {
+      font-size: 18px;
+      line-height: var(--line-height-heading);
+    }
+
+    .modal-body {
+      padding: var(--space-4);
+    }
+
+    .modal-footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: var(--space-2);
+      padding: var(--space-4);
+      border-top: 1px solid var(--color-border);
+    }
+
+    /* ===== Form ===== */
+    .form-group {
+      margin-bottom: var(--space-4);
+    }
+
+    .form-group label {
+      display: block;
+      margin-bottom: var(--space-1);
+      font-size: 14px;
+      font-weight: 500;
+    }
+
+    .form-group input,
+    .form-group select,
+    .form-group textarea {
+      width: 100%;
+      min-height: 44px;
+      padding: var(--space-2) var(--space-3);
+      border: 1px solid var(--color-border);
+      border-radius: 8px;
+      font-size: 14px;
+      font-family: inherit;
+    }
+
+    .form-group textarea {
+      min-height: 88px;
+      resize: vertical;
+    }
+
+    .form-group input:focus,
+    .form-group select:focus,
+    .form-group textarea:focus {
+      outline: 2px solid var(--color-primary);
+      outline-offset: 2px;
+    }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: var(--space-3);
+    }
+
+    /* ===== Toast ===== */
+    .toast {
+      position: fixed;
+      bottom: var(--space-4);
+      left: 50%;
+      transform: translateX(-50%) translateY(100px);
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      padding: var(--space-3) var(--space-4);
+      background: var(--color-text);
+      color: white;
+      border-radius: 8px;
+      font-size: 14px;
+      box-shadow: var(--shadow-modal);
+      transition: transform 0.3s ease;
+      z-index: 200;
+    }
+
+    .toast.visible {
+      transform: translateX(-50%) translateY(0);
+    }
+
+    .toast-undo {
+      padding: var(--space-1) var(--space-2);
+      background: transparent;
+      border: 1px solid white;
+      color: white;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 13px;
+      min-height: 32px;
+    }
+
+    .toast-undo:hover {
+      background: hsla(0, 0%, 100%, 0.1);
+    }
+
+    /* ===== Responsive ===== */
+    @media (max-width: 600px) {
+      .form-row {
+        grid-template-columns: 1fr;
+      }
+      
+      .app-card {
+        grid-template-columns: 1fr;
+      }
+      
+      .app-card-actions {
+        justify-content: flex-end;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Job Tracker</h1>
+      <button class="btn btn-primary" id="addBtn">
+        <span>+</span> Add Application
+      </button>
+    </header>
+
+    <div class="stats-bar" id="statsBar"></div>
+
+    <div class="controls">
+      <div class="select-wrap">
+        <select id="filterStatus">
+          <option value="all">All Statuses</option>
+          <option value="wishlist">Wishlist</option>
+          <option value="applied">Applied</option>
+          <option value="interview">Interview</option>
+          <option value="offer">Offer</option>
+          <option value="accepted">Accepted</option>
+          <option value="rejected">Rejected</option>
+        </select>
+      </div>
+      <div class="select-wrap">
+        <select id="sortBy">
+          <option value="newest">Newest First</option>
+          <option value="oldest">Oldest First</option>
+          <option value="company">By Company</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="app-list" id="appList"></div>
+
+    <div class="empty-state" id="emptyState" style="display: none;">
+      <div class="empty-state-icon">📋</div>
+      <h2>No applications yet</h2>
+      <p>Start tracking your job search</p>
+      <button class="btn btn-primary" id="addBtnEmpty">Add Your First Application</button>
+    </div>
+  </div>
+
+  <!-- Modal -->
+  <div class="modal-backdrop" id="modalBackdrop">
+    <div class="modal" role="dialog" aria-labelledby="modalTitle">
+      <div class="modal-header">
+        <h2 id="modalTitle">Add Application</h2>
+        <button class="btn btn-icon" id="closeModal" aria-label="Close">✕</button>
+      </div>
+      <form id="appForm">
+        <div class="modal-body">
+          <div class="form-group">
+            <label for="company">Company *</label>
+            <input type="text" id="company" name="company" required>
+          </div>
+          <div class="form-group">
+            <label for="position">Position *</label>
+            <input type="text" id="position" name="position" required>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="status">Status</label>
+              <select id="status" name="status">
+                <option value="wishlist">Wishlist</option>
+                <option value="applied">Applied</option>
+                <option value="interview">Interview</option>
+                <option value="offer">Offer</option>
+                <option value="accepted">Accepted</option>
+                <option value="rejected">Rejected</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="appliedDate">Date</label>
+              <input type="date" id="appliedDate" name="appliedDate">
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="url">Job URL</label>
+            <input type="url" id="url" name="url" placeholder="https://...">
+          </div>
+          <div class="form-group">
+            <label for="notes">Notes</label>
+            <textarea id="notes" name="notes" placeholder="Interview feedback, contacts, etc."></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="cancelBtn">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="saveBtn">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div class="toast" id="toast">
+    <span id="toastMessage"></span>
+    <button class="toast-undo" id="toastUndo" style="display: none;">Undo</button>
+  </div>
+
+  <script>
+    // ===== State =====
+    const STORAGE_KEY = 'job_tracker_apps';
+    let applications = [];
+    let editingId = null;
+    let deletedApp = null;
+    let toastTimeout = null;
+
+    // ===== DOM Elements =====
+    const appList = document.getElementById('appList');
+    const statsBar = document.getElementById('statsBar');
+    const emptyState = document.getElementById('emptyState');
+    const modalBackdrop = document.getElementById('modalBackdrop');
+    const modalTitle = document.getElementById('modalTitle');
+    const appForm = document.getElementById('appForm');
+    const filterStatus = document.getElementById('filterStatus');
+    const sortBy = document.getElementById('sortBy');
+    const toast = document.getElementById('toast');
+    const toastMessage = document.getElementById('toastMessage');
+    const toastUndo = document.getElementById('toastUndo');
+
+    // ===== UUID Generator =====
+    function generateId() {
+      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+        const r = Math.random() * 16 | 0;
+        return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+      });
+    }
+
+    // ===== Storage =====
+    function loadApplications() {
+      try {
+        const data = localStorage.getItem(STORAGE_KEY);
+        applications = data ? JSON.parse(data) : [];
+      } catch {
+        applications = [];
+      }
+    }
+
+    function saveApplications() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(applications));
+    }
+
+    // ===== Rendering =====
+    function render() {
+      renderStats();
+      renderList();
+    }
+
+    function renderStats() {
+      const counts = {
+        wishlist: 0, applied: 0, interview: 0, offer: 0, accepted: 0, rejected: 0
+      };
+      applications.forEach(app => counts[app.status]++);
+      
+      statsBar.innerHTML = Object.entries(counts)
+        .filter(([_, count]) => count > 0)
+        .map(([status, count]) => `
+          <div class="stat">
+            <span class="stat-dot dot-${status}"></span>
+            <span class="stat-count">${count}</span>
+            <span>${status}</span>
+          </div>
+        `).join('');
+    }
+
+    function renderList() {
+      const filter = filterStatus.value;
+      const sort = sortBy.value;
+      
+      let filtered = filter === 'all' 
+        ? [...applications]
+        : applications.filter(app => app.status === filter);
+      
+      filtered.sort((a, b) => {
+        if (sort === 'newest') return new Date(b.createdAt) - new Date(a.createdAt);
+        if (sort === 'oldest') return new Date(a.createdAt) - new Date(b.createdAt);
+        if (sort === 'company') return a.company.localeCompare(b.company);
+        return 0;
+      });
+
+      if (filtered.length === 0) {
+        appList.innerHTML = '';
+        emptyState.style.display = 'block';
+        return;
+      }
+
+      emptyState.style.display = 'none';
+      appList.innerHTML = filtered.map(app => `
+        <div class="app-card" data-id="${app.id}">
+          <div class="app-card-main">
+            <div class="app-company">${escapeHtml(app.company)}</div>
+            <div class="app-position">${escapeHtml(app.position)}</div>
+            <div class="app-meta">
+              <span class="app-status status-${app.status}">${app.status}</span>
+              ${app.appliedDate ? `<span>${formatDate(app.appliedDate)}</span>` : ''}
+              ${app.url ? `<a href="${escapeHtml(app.url)}" target="_blank" rel="noopener">View Job</a>` : ''}
+            </div>
+            ${app.notes ? `<div class="app-notes" style="margin-top: var(--space-2); font-size: 13px; color: var(--color-text-secondary);">${escapeHtml(app.notes)}</div>` : ''}
+          </div>
+          <div class="app-card-actions">
+            <button class="btn btn-icon" onclick="editApp('${app.id}')" aria-label="Edit">✏️</button>
+            <button class="btn btn-icon" onclick="deleteApp('${app.id}')" aria-label="Delete">🗑️</button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function formatDate(dateStr) {
+      try {
+        return new Date(dateStr).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+      } catch {
+        return dateStr;
+      }
+    }
+
+    // ===== Modal =====
+    function openModal(isEdit = false) {
+      modalTitle.textContent = isEdit ? 'Edit Application' : 'Add Application';
+      document.getElementById('saveBtn').textContent = isEdit ? 'Update' : 'Save';
+      modalBackdrop.classList.add('active');
+      document.getElementById('company').focus();
+    }
+
+    function closeModal() {
+      modalBackdrop.classList.remove('active');
+      appForm.reset();
+      editingId = null;
+    }
+
+    // ===== CRUD =====
+    function addApplication(data) {
+      const app = {
+        id: generateId(),
+        company: data.company.trim(),
+        position: data.position.trim(),
+        status: data.status,
+        appliedDate: data.appliedDate || null,
+        url: data.url.trim() || null,
+        notes: data.notes.trim() || null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      applications.unshift(app);
+      saveApplications();
+      render();
+      showToast('Application added');
+    }
+
+    function updateApplication(id, data) {
+      const index = applications.findIndex(app => app.id === id);
+      if (index === -1) return;
+      
+      applications[index] = {
+        ...applications[index],
+        company: data.company.trim(),
+        position: data.position.trim(),
+        status: data.status,
+        appliedDate: data.appliedDate || null,
+        url: data.url.trim() || null,
+        notes: data.notes.trim() || null,
+        updatedAt: new Date().toISOString()
+      };
+      saveApplications();
+      render();
+      showToast('Application updated');
+    }
+
+    function deleteApp(id) {
+      const index = applications.findIndex(app => app.id === id);
+      if (index === -1) return;
+      
+      deletedApp = { ...applications[index], index };
+      applications.splice(index, 1);
+      saveApplications();
+      render();
+      showToast('Application deleted', true);
+    }
+
+    function undoDelete() {
+      if (!deletedApp) return;
+      applications.splice(deletedApp.index, 0, deletedApp);
+      delete deletedApp.index;
+      deletedApp = null;
+      saveApplications();
+      render();
+      hideToast();
+      showToast('Deletion undone');
+    }
+
+    function editApp(id) {
+      const app = applications.find(a => a.id === id);
+      if (!app) return;
+      
+      editingId = id;
+      document.getElementById('company').value = app.company;
+      document.getElementById('position').value = app.position;
+      document.getElementById('status').value = app.status;
+      document.getElementById('appliedDate').value = app.appliedDate || '';
+      document.getElementById('url').value = app.url || '';
+      document.getElementById('notes').value = app.notes || '';
+      openModal(true);
+    }
+
+    // ===== Toast =====
+    function showToast(message, showUndo = false) {
+      clearTimeout(toastTimeout);
+      toastMessage.textContent = message;
+      toastUndo.style.display = showUndo ? 'inline-block' : 'none';
+      toast.classList.add('visible');
+      toastTimeout = setTimeout(hideToast, showUndo ? 5000 : 2500);
+    }
+
+    function hideToast() {
+      toast.classList.remove('visible');
+      deletedApp = null;
+    }
+
+    // ===== Event Listeners =====
+    document.getElementById('addBtn').addEventListener('click', () => openModal());
+    document.getElementById('addBtnEmpty').addEventListener('click', () => openModal());
+    document.getElementById('closeModal').addEventListener('click', closeModal);
+    document.getElementById('cancelBtn').addEventListener('click', closeModal);
+    
+    modalBackdrop.addEventListener('click', (e) => {
+      if (e.target === modalBackdrop) closeModal();
+    });
+
+    appForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const formData = new FormData(appForm);
+      const data = Object.fromEntries(formData);
+      
+      if (editingId) {
+        updateApplication(editingId, data);
+      } else {
+        addApplication(data);
+      }
+      closeModal();
+    });
+
+    filterStatus.addEventListener('change', render);
+    sortBy.addEventListener('change', render);
+    toastUndo.addEventListener('click', undoDelete);
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && modalBackdrop.classList.contains('active')) {
+        closeModal();
+      }
+    });
+
+    // ===== Initialize =====
+    loadApplications();
+    render();
+  </script>
+</body>
+</html>
