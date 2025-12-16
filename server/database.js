@@ -37,8 +37,25 @@ async function initDatabase() {
       applied_date TEXT,
       url TEXT,
       notes TEXT,
+      resume_url TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    )
+  `);
+
+  // Resumes table for cloud storage (FIX-001: moved from server.js)
+  db.run(`
+    CREATE TABLE IF NOT EXISTS resumes (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      file_name TEXT NOT NULL,
+      file_data TEXT NOT NULL,
+      file_type TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      deleted_at TEXT,
       FOREIGN KEY (user_id) REFERENCES users(id)
     )
   `);

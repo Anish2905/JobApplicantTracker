@@ -7,7 +7,18 @@ const { initDatabase, getDb, saveDatabase } = require('./database');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const JWT_SECRET = process.env.JWT_SECRET || 'job-tracker-secret-change-in-production';
+
+// FIX-002: JWT_SECRET must be set in production; warn in development
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+    if (process.env.NODE_ENV === 'production') {
+        console.error('FATAL: JWT_SECRET environment variable is required in production');
+        process.exit(1);
+    } else {
+        console.warn('WARNING: JWT_SECRET not set. Using insecure default for development only.');
+    }
+}
+const jwtSecret = JWT_SECRET || 'dev-only-insecure-secret-do-not-use-in-prod';
 
 // Middleware - explicit CORS for Railway/Render
 app.use(cors({
@@ -29,7 +40,7 @@ function authMiddleware(req, res, next) {
 
     const token = authHeader.substring(7);
     try {
-        const decoded = jwt.verify(token, JWT_SECRET);
+        const decoded = jwt.verify(token, jwtSecret);
         req.userId = decoded.userId;
         next();
     } catch {
@@ -45,10 +56,51 @@ function generateId() {
     });
 }
 
+// ===== FIX-003: Simple Rate Limiting for Auth Endpoints =====
+const authAttempts = new Map(); // IP -> { count, resetTime }
+const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
+const RATE_LIMIT_MAX_ATTEMPTS = 5;
+
+function rateLimitAuth(req, res, next) {
+    const ip = req.ip || req.connection.remoteAddress || 'unknown';
+    const now = Date.now();
+
+    let record = authAttempts.get(ip);
+
+    // Reset if window expired
+    if (!record || now > record.resetTime) {
+        record = { count: 0, resetTime: now + RATE_LIMIT_WINDOW_MS };
+        authAttempts.set(ip, record);
+    }
+
+    record.count++;
+
+    if (record.count > RATE_LIMIT_MAX_ATTEMPTS) {
+        const retryAfter = Math.ceil((record.resetTime - now) / 1000);
+        res.setHeader('Retry-After', retryAfter);
+        return res.status(429).json({
+            error: 'Too many attempts. Please try again later.',
+            retryAfter
+        });
+    }
+
+    next();
+}
+
+// Clean up old entries every 5 minutes
+setInterval(() => {
+    const now = Date.now();
+    for (const [ip, record] of authAttempts.entries()) {
+        if (now > record.resetTime) {
+            authAttempts.delete(ip);
+        }
+    }
+}, 5 * 60 * 1000);
+
 // ===== Auth Routes =====
 
 // Register
-app.post('/api/register', async (req, res) => {
+app.post('/api/register', rateLimitAuth, async (req, res) => {
     try {
         const db = getDb();
         if (!db) {
@@ -85,7 +137,7 @@ app.post('/api/register', async (req, res) => {
         );
         saveDatabase();
 
-        const token = jwt.sign({ userId: id }, JWT_SECRET, { expiresIn: '30d' });
+        const token = jwt.sign({ userId: id }, jwtSecret, { expiresIn: '30d' });
         res.status(201).json({ token, userId: id });
     } catch (error) {
         console.error('Register error:', error);
@@ -94,7 +146,7 @@ app.post('/api/register', async (req, res) => {
 });
 
 // Login
-app.post('/api/login', async (req, res) => {
+app.post('/api/login', rateLimitAuth, async (req, res) => {
     try {
         const db = getDb();
         if (!db) {
@@ -119,7 +171,7 @@ app.post('/api/login', async (req, res) => {
             return res.status(401).json({ error: 'Invalid credentials' });
         }
 
-        const token = jwt.sign({ userId }, JWT_SECRET, { expiresIn: '30d' });
+        const token = jwt.sign({ userId }, jwtSecret, { expiresIn: '30d' });
         res.json({ token, userId });
     } catch (error) {
         console.error('Login error:', error);
@@ -249,59 +301,49 @@ app.post('/api/applications/restore', authMiddleware, (req, res) => {
 });
 
 // ===== Resume Sync (Full Implementation) =====
-// Ensure resumes table exists
-db.exec(`
-  CREATE TABLE IF NOT EXISTS resumes (
-    id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL,
-    name TEXT NOT NULL,
-    file_name TEXT NOT NULL,
-    file_data TEXT NOT NULL,
-    file_type TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-    deleted_at TEXT,
-    FOREIGN KEY (user_id) REFERENCES users(id)
-  )
-`);
+// Note: resumes table is now created in database.js initDatabase() - FIX-001
 
 app.get('/api/resume-sync', authMiddleware, (req, res) => {
     try {
+        const db = getDb();
         const { id } = req.query;
+
         // 1. Single Fetch (Full Data)
         if (id) {
-            const row = db.prepare('SELECT * FROM resumes WHERE id = ? AND user_id = ? AND deleted_at IS NULL').get(id, req.userId);
-            if (!row) return res.status(404).json({ error: 'Resume not found' });
-            return res.json({
-                resume: {
-                    id: row.id,
-                    name: row.name,
-                    fileName: row.file_name,
-                    fileData: row.file_data,
-                    fileType: row.file_type,
-                    createdAt: row.created_at,
-                    updatedAt: row.updated_at
-                }
+            const result = db.exec('SELECT * FROM resumes WHERE id = ? AND user_id = ? AND deleted_at IS NULL', [id, req.userId]);
+            if (result.length === 0 || result[0].values.length === 0) {
+                return res.status(404).json({ error: 'Resume not found' });
+            }
+            const columns = result[0].columns;
+            const row = result[0].values[0];
+            const resume = {};
+            columns.forEach((col, i) => {
+                const key = col.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+                resume[key] = row[i];
             });
+            return res.json({ resume });
         }
 
         // 2. List Fetch (Metadata Only)
-        // Note: better-sqlite3 uses .all() for multiple rows
-        const rows = db.prepare(`
+        const result = db.exec(`
             SELECT id, name, file_name, file_type, created_at, updated_at 
             FROM resumes WHERE user_id = ? AND deleted_at IS NULL 
             ORDER BY created_at DESC
-        `).all(req.userId);
+        `, [req.userId]);
 
-        const resumes = rows.map(row => ({
-            id: row.id,
-            name: row.name,
-            fileName: row.file_name,
-            // No fileData
-            fileType: row.file_type,
-            createdAt: row.created_at,
-            updatedAt: row.updated_at
-        }));
+        if (result.length === 0) {
+            return res.json({ resumes: [] });
+        }
+
+        const columns = result[0].columns;
+        const resumes = result[0].values.map(row => {
+            const obj = {};
+            columns.forEach((col, i) => {
+                const key = col.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+                obj[key] = row[i];
+            });
+            return obj;
+        });
         res.json({ resumes });
 
     } catch (e) {
@@ -312,20 +354,22 @@ app.get('/api/resume-sync', authMiddleware, (req, res) => {
 
 app.post('/api/resume-sync', authMiddleware, (req, res) => {
     try {
+        const db = getDb();
         const { action, resume } = req.body;
 
         if (action === 'upload') {
-            const stmt = db.prepare(`
+            db.run(`
                 INSERT OR REPLACE INTO resumes (id, user_id, name, file_name, file_data, file_type, created_at, updated_at, deleted_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)
-            `);
-            stmt.run(resume.id, req.userId, resume.name, resume.fileName, resume.fileData, resume.fileType, resume.createdAt, resume.updatedAt);
+            `, [resume.id, req.userId, resume.name, resume.fileName, resume.fileData, resume.fileType, resume.createdAt, resume.updatedAt]);
+            saveDatabase();
             return res.json({ success: true });
         }
 
         if (action === 'delete') {
-            const stmt = db.prepare('UPDATE resumes SET deleted_at = ?, updated_at = ? WHERE id = ? AND user_id = ?');
-            stmt.run(new Date().toISOString(), new Date().toISOString(), resume.id, req.userId);
+            db.run('UPDATE resumes SET deleted_at = ?, updated_at = ? WHERE id = ? AND user_id = ?',
+                [new Date().toISOString(), new Date().toISOString(), resume.id, req.userId]);
+            saveDatabase();
             return res.json({ success: true });
         }
 
